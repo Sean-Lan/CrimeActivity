@@ -1,5 +1,6 @@
 package com.example.lx.crimeactivity;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -7,9 +8,11 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.ShareCompat;
+import android.support.v4.content.ContextCompat;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.text.format.DateFormat;
@@ -24,6 +27,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.Toast;
 
 import java.util.Date;
 import java.util.UUID;
@@ -35,6 +39,7 @@ public class CrimeFragment extends Fragment {
 
     private static final int REQUEST_DATE = 0;
     private static final int REQUEST_CONTACT = 1;
+    private static final int READ_CONTACTS_PERMISSION = 2;
 
     private Crime mCrime;
     private EditText mTitleField;
@@ -43,6 +48,7 @@ public class CrimeFragment extends Fragment {
     private Button mSuspectButton;
     private Button mReportButton;
     private Button mPhoneButton;
+    private int suspectId = -1;
 
     public static CrimeFragment newInstance(UUID crimeId) {
         Bundle args = new Bundle();
@@ -230,26 +236,81 @@ public class CrimeFragment extends Fragment {
                 int suspectId = Integer.parseInt(c.getString(c.getColumnIndex(ContactsContract.Contacts._ID)));
 
                 if (suspectId > 0) {
-                    Cursor c2 = getActivity().getContentResolver()
-                            .query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                                    new String[] {ContactsContract.CommonDataKinds.Phone.NUMBER},
-                                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=" + suspectId, null, null);
-                    c2.moveToFirst();
-                    String phoneNumber = null;
-                    while (!c2.isAfterLast()) {
-                        phoneNumber = c2.getString(0);
-                        Log.d("lanxiang", "phoneNumber is:" + phoneNumber);
-                        c2.moveToNext();
-                    }
-                    if (phoneNumber != null) {
-                        mCrime.setSuspectPhoneNumber(phoneNumber);
-                        mPhoneButton.setEnabled(true);
+                    this.suspectId = suspectId;
+                    if (ContextCompat.checkSelfPermission(getActivity(),
+                            android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                        if (ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), android.Manifest.permission.READ_CONTACTS)) {
+                            // show an explanation
+                            Toast.makeText(getActivity(), "We need to read your contacts to find the phone number.", Toast.LENGTH_SHORT).show();
+                            requestReadContactsPermission();
+                        } else {
+                            // directly ask the user for permission.
+                            requestReadContactsPermission();
+                        }
+
+                    } else {
+                        // already have the permission.
+                        getPhoneNumber();
                     }
                 }
 
             } finally {
                 c.close();
             }
+        }
+    }
+
+    private void requestReadContactsPermission() {
+        requestPermissions(new String[] {Manifest.permission.READ_CONTACTS},
+                READ_CONTACTS_PERMISSION);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case READ_CONTACTS_PERMISSION: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // permission was granted, yay! Do the
+                    // contacts-related task you need to do.
+                    if (this.suspectId > 0) {
+                        getPhoneNumber();
+                    }
+                } else {
+                    Toast.makeText(getActivity(), "Please allow CrimeIntent to access your contacts.", Toast.LENGTH_SHORT).show();
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                }
+                return;
+            }
+            // other 'case' lines to check for other
+            // permissions this app might request
+            default:
+                break;
+        }
+    }
+
+    private void getPhoneNumber() {
+        Cursor c2 = getActivity().getContentResolver()
+                .query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        new String[]{ContactsContract.CommonDataKinds.Phone.NUMBER},
+                        ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=" + this.suspectId, null, null);
+        try {
+            c2.moveToFirst();
+            String phoneNumber = null;
+            while (!c2.isAfterLast()) {
+                phoneNumber = c2.getString(0);
+                Log.d("lanxiang", "phoneNumber is:" + phoneNumber);
+                c2.moveToNext();
+            }
+            if (phoneNumber != null) {
+                mCrime.setSuspectPhoneNumber(phoneNumber);
+                mPhoneButton.setEnabled(true);
+            }
+        } finally {
+            c2.close();
         }
     }
 
