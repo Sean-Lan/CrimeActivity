@@ -5,10 +5,11 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
-import android.support.v4.app.ActivityCompat;
+import android.provider.MediaStore;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.ShareCompat;
@@ -23,12 +24,16 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.Toast;
 
+import java.io.File;
 import java.util.Date;
 import java.util.UUID;
 
@@ -36,18 +41,23 @@ public class CrimeFragment extends Fragment {
 
     private static final String ARG_CRIME_ID = "crime_id";
     private static final String DIALOG_DATE = "DialogDate";
+    private static final String DIALOG_PICTURE = "DialogPicture";
 
     private static final int REQUEST_DATE = 0;
     private static final int REQUEST_CONTACT = 1;
     private static final int READ_CONTACTS_PERMISSION = 2;
+    private static final int REQUEST_PHOTO = 3;
 
     private Crime mCrime;
+    private File mPhotoFile;
     private EditText mTitleField;
     private Button mDateButton;
     private CheckBox mSolvedCheckbox;
     private Button mSuspectButton;
     private Button mReportButton;
     private Button mPhoneButton;
+    private ImageButton mPhotoButton;
+    private ImageView mPhotoView;
     private int suspectId = -1;
 
     public static CrimeFragment newInstance(UUID crimeId) {
@@ -64,6 +74,7 @@ public class CrimeFragment extends Fragment {
         super.onCreate(savedInstanceState);
         UUID crimeId = (UUID) getArguments().getSerializable(ARG_CRIME_ID);
         mCrime = CrimeLab.get(getActivity()).getCrime(crimeId);
+        mPhotoFile = CrimeLab.get(getActivity()).getPhotoFile(mCrime);
         setHasOptionsMenu(true);
     }
 
@@ -157,7 +168,7 @@ public class CrimeFragment extends Fragment {
 
         PackageManager packageManager = getActivity().getPackageManager();
         if (packageManager.resolveActivity(pickContact,
-                packageManager.MATCH_DEFAULT_ONLY) == null) {
+                PackageManager.MATCH_DEFAULT_ONLY) == null) {
             mSuspectButton.setEnabled(false);
         }
 
@@ -175,6 +186,49 @@ public class CrimeFragment extends Fragment {
         if (mCrime.getSuspectPhoneNumber() == null) {
             mPhoneButton.setEnabled(false);
         }
+
+        mPhotoButton = (ImageButton) v.findViewById(R.id.crime_camera);
+        final Intent captureImage = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        boolean canTakePhoto = mPhotoFile != null &&
+                captureImage.resolveActivity(packageManager) != null;
+        mPhotoButton.setEnabled(canTakePhoto);
+
+        if (canTakePhoto) {
+            Uri uri = Uri.fromFile(mPhotoFile);
+            captureImage.putExtra(MediaStore.EXTRA_OUTPUT, uri);
+        }
+
+        mPhotoButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivityForResult(captureImage, REQUEST_PHOTO);
+            }
+        });
+
+        mPhotoView = (ImageView) v.findViewById(R.id.crime_photo);
+
+
+        mPhotoView.getViewTreeObserver().addOnGlobalLayoutListener(
+                new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        mPhotoView.getViewTreeObserver()
+                                .removeOnGlobalLayoutListener(this);
+                        updatePhotoView();
+                    }
+                });
+
+        mPhotoView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mPhotoFile != null && mPhotoFile.exists()) {
+                    FragmentManager manager = getFragmentManager();
+                    DetailPictureDialogFragment dialog = DetailPictureDialogFragment
+                            .newInstance(mPhotoFile.getPath());
+                    dialog.show(manager, DIALOG_PICTURE);
+                }
+            }
+        });
 
         return v;
     }
@@ -239,7 +293,7 @@ public class CrimeFragment extends Fragment {
                     this.suspectId = suspectId;
                     if (ContextCompat.checkSelfPermission(getActivity(),
                             android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-                        if (ActivityCompat.shouldShowRequestPermissionRationale(getActivity(), android.Manifest.permission.READ_CONTACTS)) {
+                        if (shouldShowRequestPermissionRationale(android.Manifest.permission.READ_CONTACTS)) {
                             // show an explanation
                             Toast.makeText(getActivity(), "We need to read your contacts to find the phone number.", Toast.LENGTH_SHORT).show();
                             requestReadContactsPermission();
@@ -257,6 +311,8 @@ public class CrimeFragment extends Fragment {
             } finally {
                 c.close();
             }
+        } else if (requestCode == REQUEST_PHOTO) {
+            updatePhotoView();
         }
     }
 
@@ -302,7 +358,6 @@ public class CrimeFragment extends Fragment {
             String phoneNumber = null;
             while (!c2.isAfterLast()) {
                 phoneNumber = c2.getString(0);
-                Log.d("lanxiang", "phoneNumber is:" + phoneNumber);
                 c2.moveToNext();
             }
             if (phoneNumber != null) {
@@ -340,6 +395,16 @@ public class CrimeFragment extends Fragment {
                 dateString, solvedString, suspect);
 
         return report;
+    }
+
+    private void updatePhotoView() {
+        if (mPhotoFile == null || !mPhotoFile.exists()) {
+            mPhotoView.setImageDrawable(null);
+        } else {
+//            Bitmap bitmap = PictureUtils.getScaledBitmap(mPhotoFile.getPath(), getActivity());
+            Bitmap bitmap = PictureUtils.getScaledBitmap(mPhotoFile.getPath(), mPhotoView.getWidth(), mPhotoView.getHeight());
+            mPhotoView.setImageBitmap(bitmap);
+        }
     }
 
 }
