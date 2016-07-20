@@ -2,12 +2,12 @@ package com.example.lx.crimeactivity;
 
 import android.app.Dialog;
 import android.graphics.Bitmap;
+import android.graphics.Point;
 import android.os.Bundle;
 import android.support.v4.app.DialogFragment;
 import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 
 /**
@@ -36,18 +36,12 @@ public class DetailPictureDialogFragment extends DialogFragment {
 
         mImageView = (ImageView) v.findViewById(R.id.dialog_picture_detail_picture);
 
-        mImageView.getViewTreeObserver().addOnGlobalLayoutListener(
-                new ViewTreeObserver.OnGlobalLayoutListener() {
-                    @Override
-                    public void onGlobalLayout() {
-                        mImageView.getViewTreeObserver()
-                                .removeOnGlobalLayoutListener(this);
-                        Bitmap bitmap = PictureUtils.getScaledBitmap(picturePath,
-                                mImageView.getWidth(), mImageView.getHeight());
-                        mImageView.setImageBitmap(bitmap);
-                    }
-                });
+        Point size = new Point();
+        getActivity().getWindowManager().getDefaultDisplay().getSize(size);
 
+        Bitmap bitmap = PictureUtils.getScaledBitmap(picturePath,
+               size.x, size.y);
+        mImageView.setImageBitmap(bitmap);
 
         return new AlertDialog.Builder(getActivity())
                 .setView(v)
